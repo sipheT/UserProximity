@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using UserProximity.Helpers;
 using UserProximity.Models;
 using UserProximity.Services.Implementation;
 using UserProximity.Services.Interface;
@@ -22,15 +24,15 @@ if (app.Environment.IsDevelopment())
 // GET: /api/users - Retrieve external users
 app.MapGet("/api/users", async (IHttpClientFactory httpClientFactory) =>
 {
-    var httpClient = httpClientFactory.CreateClient();
-    var response = await httpClient.GetAsync("https://jsonplaceholder.typicode.com/users");
-    if (!response.IsSuccessStatusCode)
+    try
     {
-        return Results.StatusCode((int)response.StatusCode);
+        var externalUsers = await FetchExternalUsers(httpClientFactory);
+        return Results.Ok(externalUsers);
     }
-    var content = await response.Content.ReadAsStringAsync();
-    var externalUsers = JsonSerializer.Deserialize<IEnumerable<User>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-    return Results.Ok(externalUsers);
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.Message);
+    }
 });
 
 // POST: /api/users - Add a new user
@@ -54,9 +56,9 @@ app.MapDelete("/api/users/{id:int}", (int id, IUserService userService) =>
     return result ? Results.NoContent() : Results.NotFound();
 });
 
-// GET: /api/users/nearest - Find the nearest user for each hotel
-app.MapGet("/api/users/nearest", (IUserService userService) =>
+app.MapGet("/api/users/nearest", async (IHttpClientFactory httpClientFactory) =>
 {
+    // Predefined hotels
     var hotels = new List<(string Name, double Lat, double Lon)>
     {
         ("Hotel A", -43.9509, -34.4618),
@@ -65,28 +67,32 @@ app.MapGet("/api/users/nearest", (IUserService userService) =>
         ("Hotel D", -25.2744, 133.7751)
     };
 
-    var users = userService.GetUsers();
-
-    // Local helper function to convert degrees to radians
-    double ToRadians(double angle) => angle * (Math.PI / 180);
-
-    // Haversine formula for calculating distance
-    double Distance(double lat1, double lon1, double lat2, double lon2)
+    IEnumerable<User> users;
+    try
     {
-        const double R = 6371; // Earth's radius in kilometers
-        var dLat = ToRadians(lat2 - lat1);
-        var dLon = ToRadians(lon2 - lon1);
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2)) *
-                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-        return R * c;
+        users = await FetchExternalUsers(httpClientFactory);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.Message);
+    }
+
+    if (users == null || !users.Any())
+    {
+        return Results.NotFound("No users found.");
     }
 
     var result = hotels.Select(hotel =>
     {
-        var nearestUser = users.OrderBy(user => Distance(hotel.Lat, hotel.Lon, double.Parse(user.Address.Geo.Lat),double.Parse(user.Address.Geo.Lng)))
-                               .FirstOrDefault();
+        // Use DistanceHelper.Distance to calculate distance
+        var nearestUser = users.OrderBy(user =>
+            DistanceHelper.Distance(
+                hotel.Lat,
+                hotel.Lon,
+                double.Parse(user.Address.Geo.Lat.Trim(), CultureInfo.InvariantCulture),
+                double.Parse(user.Address.Geo.Lng.Trim(), CultureInfo.InvariantCulture)
+            )).FirstOrDefault();
+
         return new
         {
             Hotel = hotel.Name,
@@ -96,5 +102,19 @@ app.MapGet("/api/users/nearest", (IUserService userService) =>
 
     return Results.Ok(result);
 });
+
+async Task<IEnumerable<User>> FetchExternalUsers(IHttpClientFactory httpClientFactory)
+{
+    var httpClient = httpClientFactory.CreateClient();
+    var response = await httpClient.GetAsync("https://jsonplaceholder.typicode.com/users");
+    if (!response.IsSuccessStatusCode)
+    {
+        throw new Exception($"Failed to fetch users. Status code: {response.StatusCode}");
+    }
+    var content = await response.Content.ReadAsStringAsync();
+    var users = JsonSerializer.Deserialize<IEnumerable<User>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+    return users;
+}
+
 
 app.Run();
