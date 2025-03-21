@@ -1,3 +1,0 @@
-# Exclude build directories
-bin/
-obj/
