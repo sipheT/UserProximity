@@ -20,10 +20,8 @@ namespace UserProximity.Services.Implementation
         {
             var existing = _users.FirstOrDefault(u => u.Id == id);
             if (existing == null) return null;
-            // Update properties as needed
             existing.Name = user.Name;
             existing.Email = user.Email;
-            // etc.
             return existing;
         }
 
