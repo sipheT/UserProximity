@@ -14,11 +14,6 @@ namespace UserProximity.Services.Implementation
             _context = context;
         }
 
-        public UserRepository(UserDbContext context)
-        {
-            _context = context;
-        }
-
         public async Task<IEnumerable<User>> GetAllAsync()
         {
             return await _context.Users.ToListAsync();

@@ -47,11 +47,11 @@ app.MapGet("/api/users", async (IExternalUserService externalUserService, ILogge
     try
     {
         logger.LogInformation("Fetching external users.");
-        var result = await externalUserService.GetUsers();
+        var users = await externalUserService.GetUsers();
         logger.LogInformation("Fetched {UserCount} external users.", users?.Count() ?? 0);
-        return Results.Ok(result);
+        return Results.Ok(users);
     }
-    catch (Exception e)
+    catch (Exception ex)
     {
         logger.LogError(ex, "Error fetching external users.");
         return Results.Problem("An error occurred while fetching external users.");
