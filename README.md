@@ -30,5 +30,5 @@
 5. **Running Frontend:**
     ```bash
     cd Frontend
-    npm intall
+    npm install
     npm run dev
