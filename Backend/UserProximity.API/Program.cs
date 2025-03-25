@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using UserProximity.API.Data;
 using UserProximity.API.Services.Implementation;
 using UserProximity.API.Services.Interface;
 using UserProximity.Models;
@@ -8,6 +11,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
+
+builder.Services.AddDbContext<UserDbContext>(options =>
+    options.UseInMemoryDatabase("UserDb"));
 
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<IExternalUserService, ExternalUserService>();
@@ -36,28 +42,77 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapGet("/api/users", async (IExternalUserService externalUserService) =>
+app.MapGet("/api/users", async (IExternalUserService externalUserService, ILogger<Program> logger) =>
 {
-    var result =  await externalUserService.GetUsers();
-    return Results.Ok(result);
+    try
+    {
+        logger.LogInformation("Fetching external users.");
+        var result = await externalUserService.GetUsers();
+        logger.LogInformation("Fetched {UserCount} external users.", users?.Count() ?? 0);
+        return Results.Ok(result);
+    }
+    catch (Exception e)
+    {
+        logger.LogError(ex, "Error fetching external users.");
+        return Results.Problem("An error occurred while fetching external users.");
+    }
 });
 
-app.MapPost("/api/users", (User newUser, IUserService userService) =>
+app.MapPost("/api/users", async (User newUser, IUserService userService, ILogger<Program> logger) =>
 {
-    var user = userService.AddUser(newUser);
-    return Results.Created($"/api/users/{user.Id}", user);
+    try
+    {
+        logger.LogInformation("Adding a new local user.");
+        var addedUser = await userService.AddAsync(newUser);
+        return Results.Created($"/api/localusers/{addedUser.Id}", addedUser);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error adding new local user.");
+        return Results.Problem("An error occurred while adding the user.");
+    }
 });
 
-app.MapPut("/api/users/{id:int}", (int id, User updatedUser, IUserService userService) =>
+app.MapPut("/api/users/{id:int}", async (int id, User updatedUser, IUserService userService, ILogger<Program> logger) =>
 {
-    var user = userService.UpdateUser(id, updatedUser);
-    return user is null ? Results.NotFound() : Results.Ok(user);
+    try
+    {
+        logger.LogInformation("Updating local user with id {UserId}.", id);
+        // Ensure the ID is set
+        updatedUser.Id = id;
+        var user = await userService.UpdateAsync(updatedUser);
+        if (user == null)
+        {
+            logger.LogWarning("Local user with id {UserId} not found.", id);
+            return Results.NotFound();
+        }
+        return Results.Ok(user);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error updating local user with id {UserId}.", id);
+        return Results.Problem("An error occurred while updating the user.");
+    }
 });
 
-app.MapDelete("/api/users/{id:int}", (int id, IUserService userService) =>
+app.MapDelete("/api/users/{id:int}", async (int id, IUserService userService, ILogger<Program> logger) =>
 {
-    var result = userService.DeleteUser(id);
-    return result ? Results.NoContent() : Results.NotFound();
+    try
+    {
+        logger.LogInformation("Deleting local user with id {UserId}.", id);
+        var deleted = await userService.DeleteAsync(id);
+        if (!deleted)
+        {
+            logger.LogWarning("Local user with id {UserId} not found.", id);
+            return Results.NotFound();
+        }
+        return Results.NoContent();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error deleting local user with id {UserId}.", id);
+        return Results.Problem("An error occurred while deleting the user.");
+    }
 });
 
 app.MapGet("/api/users/nearest", async (INearestUserService nearestUserService, ILogger<Program> logger) =>

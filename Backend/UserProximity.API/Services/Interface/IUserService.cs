@@ -4,9 +4,10 @@ namespace UserProximity.Services.Interface
 {
     public interface IUserService
     {
-        IEnumerable<User> GetUsers();
-        User AddUser(User user);
-        User UpdateUser(int id, User user);
-        bool DeleteUser(int id);
+        Task<IEnumerable<User>> GetAllAsync();
+        Task<User> GetByIdAsync(int id);
+        Task<User> AddAsync(User user);
+        Task<User> UpdateAsync(User user);
+        Task<bool> DeleteAsync(int id);
     }
 }
